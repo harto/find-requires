@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+absolutize() {
+  local path=$1
+  if [[ -d $path ]]; then
+    (cd $path; pwd -P)
+  else
+    echo $(cd $(dirname $path); pwd -P)/$(basename $path)
+  fi
+}
+
+relativize() {
+  local base=$1
+  local path=$2
+  if [[ ! -d $base ]]; then
+    base=$(dirname $base)
+  fi
+  local base_abs=$(cd $base; pwd -P)/
+  local path_abs=$(cd $(dirname $path); pwd -P)/$(basename $path)
+  echo ${path_abs##$base_abs}
+}
+
+print_usage() {
+  echo "usage: $(basename $0) [-e <exclude_path>] <dir>"
+}
+
+local_requires() {
+  local module_path=$1
+  sed -En "s/.+ require\('(\.[^']+).*/\1/p" $module_path
+}
+
+excludes=
+while getopts "e:h" opt; do
+  case $opt in
+    e) excludes+=" $OPTARG" ;;
+    h) print_usage; exit ;;
+    ?) print_usage; exit 1 ;;
+  esac
+done
+
+shift $(( $OPTIND - 1 ))
+
+if [[ -z ${1:-} ]]; then
+  usage
+fi
+
+project_path=$(absolutize $1)
+prune_opts=$(for e in $excludes; do
+               echo -n " -o -name $(relativize $project_path $e) -prune"
+             done)
+
+find $project_path -false $prune_opts -o -type f -name \*.js | \
+while read module_path; do
+  local_requires $module_path | while read require; do
+    require_path=$(absolutize "$(dirname $module_path)/${require}.js")
+    echo $(relativize $project_path $module_path) $(relativize $project_path $require_path)
+  done | uniq
+done
