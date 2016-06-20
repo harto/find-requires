@@ -42,7 +42,8 @@ done
 shift $(( $OPTIND - 1 ))
 
 if [[ -z ${1:-} ]]; then
-  usage
+  print_usage
+  exit 1
 fi
 
 project_path=$(absolutize $1)
